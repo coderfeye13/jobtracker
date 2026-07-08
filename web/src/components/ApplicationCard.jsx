@@ -15,6 +15,12 @@ export function formatSalary(app) {
   return `bis ${fmt(app.salary_max)} ${suffix}`
 }
 
+export function scoreCls(score) {
+  if (score >= 75) return 'score-green'
+  if (score >= 50) return 'score-amber'
+  return 'score-red'
+}
+
 export default function ApplicationCard({ app, onClick }) {
   const salary = formatSalary(app)
 
@@ -28,7 +34,12 @@ export default function ApplicationCard({ app, onClick }) {
       }}
       onClick={onClick}
     >
-      <div className="card-company">{app.company}</div>
+      <div className="card-top">
+        <div className="card-company">{app.company}</div>
+        {app.fit_score != null && (
+          <span className={`score-badge ${scoreCls(app.fit_score)}`}>{app.fit_score}</span>
+        )}
+      </div>
       <div className="card-position">{app.position}</div>
       <div className="card-meta">
         {app.city && <span className="badge badge-city">{app.city}</span>}

@@ -33,3 +33,27 @@ export const parseJobPosting = (rawText, url) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ raw_text: rawText, ...(url ? { url } : {}) }),
   }).then(handleResponse)
+
+export const getProfile = () =>
+  fetch(`${API_BASE}/profile`).then(handleResponse)
+
+export const updateProfile = (cvText) =>
+  fetch(`${API_BASE}/profile`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cv_text: cvText }),
+  }).then(handleResponse)
+
+export const scoreApplication = (appId) =>
+  fetch(`${API_BASE}/ai/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ application_id: appId }),
+  }).then(handleResponse)
+
+export const generateCoverLetter = (appId, language, tone) =>
+  fetch(`${API_BASE}/ai/cover-letter`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ application_id: appId, language, tone }),
+  }).then(handleResponse)

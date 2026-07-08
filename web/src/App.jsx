@@ -3,6 +3,7 @@ import { listApplications, updateApplication, deleteApplication, createApplicati
 import KanbanBoard from './components/KanbanBoard.jsx'
 import DetailPanel from './components/DetailPanel.jsx'
 import AddModal from './components/AddModal.jsx'
+import CVModal from './components/CVModal.jsx'
 
 export default function App() {
   const [apps, setApps] = useState([])
@@ -10,6 +11,7 @@ export default function App() {
   const [error, setError] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showCVModal, setShowCVModal] = useState(false)
 
   const fetchApps = useCallback(async () => {
     try {
@@ -52,18 +54,27 @@ export default function App() {
     setShowAddModal(false)
   }
 
+  const handleAppScored = (id, scoreResult) => {
+    setApps(prev => prev.map(a =>
+      a.id === id
+        ? { ...a, fit_score: scoreResult.score, score_details: JSON.stringify(scoreResult) }
+        : a
+    ))
+  }
+
   const selectedApp = apps.find(a => a.id === selectedId) ?? null
 
   if (loading) return <div className="full-page-state">Loading…</div>
-  if (error) return <div className="full-page-state error-state">Error: {error}</div>
+  if (error)   return <div className="full-page-state error-state">Error: {error}</div>
 
   return (
     <div className="app">
       <header className="app-header">
         <h1>JobTracker</h1>
-        <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-          + Add Application
-        </button>
+        <div className="header-actions">
+          <button className="btn-secondary" onClick={() => setShowCVModal(true)}>My CV</button>
+          <button className="btn-primary"   onClick={() => setShowAddModal(true)}>+ Add Application</button>
+        </div>
       </header>
 
       <main className="app-main">
@@ -81,14 +92,17 @@ export default function App() {
           onUpdate={handleUpdate}
           onDelete={handleDelete}
           onClose={() => setSelectedId(null)}
+          onOpenCV={() => { setShowCVModal(true) }}
+          onAppScored={handleAppScored}
         />
       )}
 
       {showAddModal && (
-        <AddModal
-          onSave={handleCreate}
-          onClose={() => setShowAddModal(false)}
-        />
+        <AddModal onSave={handleCreate} onClose={() => setShowAddModal(false)} />
+      )}
+
+      {showCVModal && (
+        <CVModal onClose={() => setShowCVModal(false)} />
       )}
     </div>
   )

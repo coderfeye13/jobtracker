@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { ET_LABELS, formatSalary } from './ApplicationCard.jsx'
+import ScoreSection from './ScoreSection.jsx'
+import CoverLetterSection from './CoverLetterSection.jsx'
 
 const SOURCE_LABELS = {
   linkedin: 'LinkedIn', indeed: 'Indeed', stepstone: 'StepStone',
   referral: 'Referral', company_site: 'Company Site', other: 'Other',
 }
 
-export default function DetailPanel({ app, onUpdate, onDelete, onClose }) {
+export default function DetailPanel({ app, onUpdate, onDelete, onClose, onOpenCV, onAppScored }) {
   const [notes, setNotes] = useState(app.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -33,12 +35,12 @@ export default function DetailPanel({ app, onUpdate, onDelete, onClose }) {
 
         <div className="detail-body">
           <div className="detail-grid">
-            {app.city           && <Field label="City"     value={app.city} />}
+            {app.city            && <Field label="City"    value={app.city} />}
             {app.employment_type && <Field label="Type"    value={ET_LABELS[app.employment_type] ?? app.employment_type} />}
-            {salary             && <Field label="Salary"   value={salary} />}
-            {app.source         && <Field label="Source"   value={SOURCE_LABELS[app.source] ?? app.source} />}
-            {app.status         && <Field label="Status"   value={app.status} />}
-            {app.applied_at     && <Field label="Applied"  value={app.applied_at} />}
+            {salary              && <Field label="Salary"  value={salary} />}
+            {app.source          && <Field label="Source"  value={SOURCE_LABELS[app.source] ?? app.source} />}
+            {app.status          && <Field label="Status"  value={app.status} />}
+            {app.applied_at      && <Field label="Applied" value={app.applied_at} />}
             {app.url && (
               <div className="field full-width">
                 <span className="field-label">URL</span>
@@ -62,11 +64,11 @@ export default function DetailPanel({ app, onUpdate, onDelete, onClose }) {
               className="notes-textarea"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              rows={5}
+              rows={4}
               placeholder="Add notes…"
             />
             <button
-              className="btn-secondary"
+              className="btn-secondary btn-sm"
               onClick={handleSaveNotes}
               disabled={saving || notes === (app.notes ?? '')}
               style={{ alignSelf: 'flex-start', marginTop: 6 }}
@@ -74,6 +76,10 @@ export default function DetailPanel({ app, onUpdate, onDelete, onClose }) {
               {saving ? 'Saving…' : 'Save Notes'}
             </button>
           </div>
+
+          <ScoreSection app={app} onOpenCV={onOpenCV} onAppScored={onAppScored} />
+
+          <CoverLetterSection app={app} onOpenCV={onOpenCV} />
         </div>
 
         <div className="detail-footer">

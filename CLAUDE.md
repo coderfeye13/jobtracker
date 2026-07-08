@@ -20,7 +20,10 @@ Self-hosted job application tracker. Go backend, contract-first design.
   (e.g. go-shiori/go-readability), feed into the existing ParseJob pipeline.
   Same AI function, second input channel. Skip pages behind login walls;
   return a clear error suggesting copy-paste instead.
-- Phase 2: CV fit scoring + cover letter generation
+- Phase 2 (DONE): CV profile (PUT/GET /profile), AI fit scoring
+  (POST /ai/score — persists fit_score + score_details on the application),
+  cover letter generation (POST /ai/cover-letter — draft only, not persisted).
+  Backend complete; frontend integration pending.
 - Phase 3: Gmail integration (job alert filtering, rejection/progress classification)
 - Phase 4+ (idea, not scheduled): Browser extension ("clip to jobtracker") —
   a small Chrome extension that grabs the visible text of the currently open
@@ -56,6 +59,7 @@ Dev workflow: run both the Go server and `npm run dev` simultaneously.
 CORS is configured for `http://localhost:5173` (Vite default).
 
 Component structure:
+
 - `App.jsx` — state, fetch/update/delete/create handlers
 - `components/KanbanBoard.jsx` — 6 status columns
 - `components/KanbanColumn.jsx` — HTML5 drag-and-drop drop target
@@ -63,4 +67,7 @@ Component structure:
 - `components/DetailPanel.jsx` — right slide-in, notes edit, delete confirm
 - `components/AddModal.jsx` — AI parse flow or manual add
 - `components/ApplicationForm.jsx` — all ApplicationInput fields
-- `api.js` — `API_BASE` constant + fetch helpers
+- `api.js` — `API_BASE` constant + fetch helpers (applications, profile, ai/score, ai/cover-letter)
+- `components/CVModal.jsx` — GET/PUT /profile; textarea + last-updated display
+- `components/ScoreSection.jsx` — POST /ai/score; score number, keyword chips, suggestions; pre-populates from score_details
+- `components/CoverLetterSection.jsx` — POST /ai/cover-letter; language/tone selects, editable monospace result, copy button
