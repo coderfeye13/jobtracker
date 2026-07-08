@@ -1,0 +1,12 @@
+# database (personal data)
+jobtracker.db
+
+# build output
+/server
+
+# env
+.env
+.env.*
+
+# Go
+vendor/
