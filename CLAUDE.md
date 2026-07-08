@@ -71,3 +71,8 @@ Component structure:
 - `components/CVModal.jsx` — GET/PUT /profile; textarea + last-updated display
 - `components/ScoreSection.jsx` — POST /ai/score; score number, keyword chips, suggestions; pre-populates from score_details
 - `components/CoverLetterSection.jsx` — POST /ai/cover-letter; language/tone selects, editable monospace result, copy button
+
+## Data safety — IMPORTANT
+
+NEVER delete, overwrite or reseed jobtracker.db — it contains real application
+data. For UI/integration tests use a separate DB file or ask me first.
