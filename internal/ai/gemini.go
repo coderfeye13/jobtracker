@@ -15,9 +15,12 @@ import (
 // ErrUnparseable is returned when Gemini cannot extract job details from the text.
 var ErrUnparseable = errors.New("could not parse as job posting")
 
+// errEmptyResponse: Gemini returned no usable candidate (e.g. safety filter).
+var errEmptyResponse = errors.New("gemini: empty response")
+
 type Client struct {
 	inner *genai.Client
-	model string // <- Model bilgisini struct içinde saklıyoruz
+	model string
 }
 
 func NewClient(ctx context.Context, apiKey string) (*Client, error) {
@@ -29,7 +32,7 @@ func NewClient(ctx context.Context, apiKey string) (*Client, error) {
 		return nil, err
 	}
 
-	// Yapılandırma uygulama başlangıcında bir kez çözülür
+	// Configuration is resolved once at startup.
 	model := os.Getenv("GEMINI_MODEL")
 	if model == "" {
 		model = "gemini-2.5-flash"
@@ -37,6 +40,23 @@ func NewClient(ctx context.Context, apiKey string) (*Client, error) {
 
 	return &Client{inner: c, model: model}, nil
 }
+
+// firstText safely extracts the first text part of the first candidate.
+// The response is three levels deep and every level can be empty
+// (e.g. safety filters), so we guard all of them before dereferencing.
+func firstText(result *genai.GenerateContentResponse) (string, error) {
+	if result == nil ||
+		len(result.Candidates) == 0 ||
+		result.Candidates[0].Content == nil ||
+		len(result.Candidates[0].Content.Parts) == 0 {
+		return "", errEmptyResponse
+	}
+	return result.Candidates[0].Content.Parts[0].Text, nil
+}
+
+// ---------------------------------------------------------------------------
+// ParseJob — Phase 1
+// ---------------------------------------------------------------------------
 
 type parsedJob struct {
 	Company        string   `json:"company"`
@@ -47,7 +67,6 @@ type parsedJob struct {
 	SalaryMin      *float64 `json:"salary_min,omitempty"`
 	SalaryMax      *float64 `json:"salary_max,omitempty"`
 	SalaryPeriod   *string  `json:"salary_period,omitempty"`
-	// applied_at ve job_description alanları şemadan temizlendi
 }
 
 var jobSchema = &genai.Schema{
@@ -88,7 +107,7 @@ func (c *Client) ParseJob(ctx context.Context, rawText string, sourceURL *string
 
 	result, err := c.inner.Models.GenerateContent(
 		ctx,
-		c.model, // <- Runtime'da env okumak yerine struct alanını kullanıyoruz
+		c.model,
 		genai.Text(prompt),
 		&genai.GenerateContentConfig{
 			SystemInstruction: systemInstruction,
@@ -101,13 +120,11 @@ func (c *Client) ParseJob(ctx context.Context, rawText string, sourceURL *string
 		return nil, fmt.Errorf("gemini: %w", err)
 	}
 
-	if len(result.Candidates) == 0 ||
-		result.Candidates[0].Content == nil ||
-		len(result.Candidates[0].Content.Parts) == 0 {
+	raw, err := firstText(result)
+	if err != nil {
 		return nil, ErrUnparseable
 	}
 
-	raw := result.Candidates[0].Content.Parts[0].Text
 	var parsed parsedJob
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return nil, ErrUnparseable
@@ -126,7 +143,7 @@ func toInput(p parsedJob, rawText string) *gen.ApplicationInput {
 		City:           p.City,
 		SalaryMin:      p.SalaryMin,
 		SalaryMax:      p.SalaryMax,
-		JobDescription: &rawText, // <- Ham metni doğrudan buradan besliyoruz
+		JobDescription: &rawText,
 	}
 	if p.Source != nil {
 		v := gen.ApplicationInputSource(*p.Source)
@@ -141,4 +158,125 @@ func toInput(p parsedJob, rawText string) *gen.ApplicationInput {
 		input.SalaryPeriod = &v
 	}
 	return &input
+}
+
+// ---------------------------------------------------------------------------
+// ScoreCV — Phase 2
+// ---------------------------------------------------------------------------
+
+// ScoreResult is the AI layer's own type (same reasoning as parsedJob:
+// validate at the boundary, stay decoupled from gen).
+type ScoreResult struct {
+	Score           int      `json:"score"`
+	MatchedKeywords []string `json:"matched_keywords"`
+	MissingKeywords []string `json:"missing_keywords"`
+	Suggestions     []string `json:"suggestions"`
+}
+
+var scoreSchema = &genai.Schema{
+	Type:     genai.TypeObject,
+	Required: []string{"score", "matched_keywords", "missing_keywords", "suggestions"},
+	Properties: map[string]*genai.Schema{
+		"score": {
+			Type:        genai.TypeInteger,
+			Description: "Overall fit score from 0 (no match) to 100 (perfect match)",
+		},
+		"matched_keywords": {
+			Type:        genai.TypeArray,
+			Items:       &genai.Schema{Type: genai.TypeString},
+			Description: "Skills/technologies required by the posting AND present in the CV",
+		},
+		"missing_keywords": {
+			Type:        genai.TypeArray,
+			Items:       &genai.Schema{Type: genai.TypeString},
+			Description: "Skills/technologies required by the posting but NOT found in the CV",
+		},
+		"suggestions": {
+			Type:        genai.TypeArray,
+			Items:       &genai.Schema{Type: genai.TypeString},
+			Description: "3-5 concrete, actionable suggestions to improve the CV for THIS posting",
+		},
+	},
+}
+
+var scoreInstruction = &genai.Content{
+	Parts: []*genai.Part{{Text: `You are an experienced technical recruiter evaluating how well a candidate's CV matches a specific job posting.
+Score honestly: 80+ only for strong matches, 50-79 for partial matches, below 50 for weak matches.
+Base keywords strictly on the posting's stated requirements. Only list a keyword as matched if there is clear evidence in the CV.
+Do not invent skills that are not in the CV. Language requirements (e.g. German level) count as keywords too.
+Keep each suggestion short, specific and actionable.`}},
+}
+
+func (c *Client) ScoreCV(ctx context.Context, cvText, jobDescription string) (*ScoreResult, error) {
+	prompt := "JOB POSTING:\n" + jobDescription + "\n\nCANDIDATE CV:\n" + cvText
+
+	result, err := c.inner.Models.GenerateContent(
+		ctx,
+		c.model,
+		genai.Text(prompt),
+		&genai.GenerateContentConfig{
+			SystemInstruction: scoreInstruction,
+			ResponseMIMEType:  "application/json",
+			ResponseSchema:    scoreSchema,
+			Temperature:       genai.Ptr[float32](0.1), // evaluation = determinism task
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("gemini: %w", err)
+	}
+
+	raw, err := firstText(result)
+	if err != nil {
+		return nil, err
+	}
+
+	var res ScoreResult
+	if err := json.Unmarshal([]byte(raw), &res); err != nil {
+		return nil, fmt.Errorf("gemini: invalid score payload: %w", err)
+	}
+	// Boundary validation: never trust the model to stay in range.
+	if res.Score < 0 {
+		res.Score = 0
+	}
+	if res.Score > 100 {
+		res.Score = 100
+	}
+	return &res, nil
+}
+
+// ---------------------------------------------------------------------------
+// GenerateCoverLetter — Phase 2
+// ---------------------------------------------------------------------------
+
+var coverLetterInstruction = &genai.Content{
+	Parts: []*genai.Part{{Text: `You write tailored cover letters for job applications.
+Rules:
+- Write in the requested LANGUAGE. For German use proper business-letter conventions (Anrede such as "Sehr geehrte Damen und Herren," and Grussformel "Mit freundlichen Gruessen" with the candidate's name from the CV).
+- Match the requested TONE: formal = conservative business style; warm = personable but professional; concise = short and direct.
+- Ground every claim in the CV. Never invent experience, skills, degrees or numbers that are not in the CV.
+- Reference 2-3 specific requirements from the posting and connect them to concrete evidence from the CV.
+- Length: 250-350 words. Output ONLY the letter body text: no subject line, no addresses, no markdown, no placeholders like [Company].`}},
+}
+
+func (c *Client) GenerateCoverLetter(ctx context.Context, cvText, jobDescription, company, position, language, tone string) (string, error) {
+	prompt := fmt.Sprintf(
+		"COMPANY: %s\nPOSITION: %s\nLANGUAGE: %s\nTONE: %s\n\nJOB POSTING:\n%s\n\nCANDIDATE CV:\n%s",
+		company, position, language, tone, jobDescription, cvText,
+	)
+
+	result, err := c.inner.Models.GenerateContent(
+		ctx,
+		c.model,
+		genai.Text(prompt),
+		&genai.GenerateContentConfig{
+			SystemInstruction: coverLetterInstruction,
+			// Writing task, not extraction: some creativity is desirable.
+			Temperature: genai.Ptr[float32](0.7),
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("gemini: %w", err)
+	}
+
+	return firstText(result)
 }

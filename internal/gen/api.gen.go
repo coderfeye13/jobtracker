@@ -140,6 +140,48 @@ func (e ApplicationUpdateSource) Valid() bool {
 	}
 }
 
+// Defines values for CoverLetterRequestLanguage.
+const (
+	De CoverLetterRequestLanguage = "de"
+	En CoverLetterRequestLanguage = "en"
+	Tr CoverLetterRequestLanguage = "tr"
+)
+
+// Valid indicates whether the value is a known member of the CoverLetterRequestLanguage enum.
+func (e CoverLetterRequestLanguage) Valid() bool {
+	switch e {
+	case De:
+		return true
+	case En:
+		return true
+	case Tr:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CoverLetterRequestTone.
+const (
+	Concise CoverLetterRequestTone = "concise"
+	Formal  CoverLetterRequestTone = "formal"
+	Warm    CoverLetterRequestTone = "warm"
+)
+
+// Valid indicates whether the value is a known member of the CoverLetterRequestTone enum.
+func (e CoverLetterRequestTone) Valid() bool {
+	switch e {
+	case Concise:
+		return true
+	case Formal:
+		return true
+	case Warm:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EmploymentType.
 const (
 	Fulltime    EmploymentType = "fulltime"
@@ -192,19 +234,25 @@ type Application struct {
 	Company        string              `json:"company"`
 	CreatedAt      time.Time           `json:"created_at"`
 	EmploymentType *EmploymentType     `json:"employment_type,omitempty"`
-	Id             int64               `json:"id"`
 
-	// JobDescription Raw posting text, reused later for CV scoring and cover letters
-	JobDescription *string            `json:"job_description,omitempty"`
-	Notes          *string            `json:"notes,omitempty"`
-	Position       string             `json:"position"`
-	SalaryMax      *float64           `json:"salary_max,omitempty"`
-	SalaryMin      *float64           `json:"salary_min,omitempty"`
-	SalaryPeriod   *SalaryPeriod      `json:"salary_period,omitempty"`
-	Source         *ApplicationSource `json:"source,omitempty"`
-	Status         *ApplicationStatus `json:"status,omitempty"`
-	UpdatedAt      time.Time          `json:"updated_at"`
-	Url            *string            `json:"url,omitempty"`
+	// FitScore AI-generated match score (0-100), set by POST /ai/score
+	FitScore *int  `json:"fit_score,omitempty"`
+	Id       int64 `json:"id"`
+
+	// JobDescription Raw posting text, reused for CV scoring and cover letters
+	JobDescription *string       `json:"job_description,omitempty"`
+	Notes          *string       `json:"notes,omitempty"`
+	Position       string        `json:"position"`
+	SalaryMax      *float64      `json:"salary_max,omitempty"`
+	SalaryMin      *float64      `json:"salary_min,omitempty"`
+	SalaryPeriod   *SalaryPeriod `json:"salary_period,omitempty"`
+
+	// ScoreDetails JSON string with matched/missing keywords and suggestions
+	ScoreDetails *string            `json:"score_details,omitempty"`
+	Source       *ApplicationSource `json:"source,omitempty"`
+	Status       *ApplicationStatus `json:"status,omitempty"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+	Url          *string            `json:"url,omitempty"`
 }
 
 // ApplicationSource defines model for Application.Source.
@@ -217,7 +265,7 @@ type ApplicationInput struct {
 	Company        string              `json:"company"`
 	EmploymentType *EmploymentType     `json:"employment_type,omitempty"`
 
-	// JobDescription Raw posting text, reused later for CV scoring and cover letters
+	// JobDescription Raw posting text, reused for CV scoring and cover letters
 	JobDescription *string                 `json:"job_description,omitempty"`
 	Notes          *string                 `json:"notes,omitempty"`
 	Position       string                  `json:"position"`
@@ -255,6 +303,24 @@ type ApplicationUpdate struct {
 // ApplicationUpdateSource defines model for ApplicationUpdate.Source.
 type ApplicationUpdateSource string
 
+// CoverLetterRequest defines model for CoverLetterRequest.
+type CoverLetterRequest struct {
+	ApplicationId int64                      `json:"application_id"`
+	Language      CoverLetterRequestLanguage `json:"language"`
+	Tone          CoverLetterRequestTone     `json:"tone"`
+}
+
+// CoverLetterRequestLanguage defines model for CoverLetterRequest.Language.
+type CoverLetterRequestLanguage string
+
+// CoverLetterRequestTone defines model for CoverLetterRequest.Tone.
+type CoverLetterRequestTone string
+
+// CoverLetterResponse defines model for CoverLetterResponse.
+type CoverLetterResponse struct {
+	CoverLetter string `json:"cover_letter"`
+}
+
 // EmploymentType defines model for EmploymentType.
 type EmploymentType string
 
@@ -263,8 +329,30 @@ type Error struct {
 	Message string `json:"message"`
 }
 
+// Profile defines model for Profile.
+type Profile struct {
+	// CvText Raw text of the user's CV
+	CvText    string     `json:"cv_text"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
 // SalaryPeriod defines model for SalaryPeriod.
 type SalaryPeriod string
+
+// ScoreRequest defines model for ScoreRequest.
+type ScoreRequest struct {
+	ApplicationId int64 `json:"application_id"`
+}
+
+// ScoreResponse defines model for ScoreResponse.
+type ScoreResponse struct {
+	MatchedKeywords []string `json:"matched_keywords"`
+	MissingKeywords []string `json:"missing_keywords"`
+
+	// Score Overall fit score, 0-100
+	Score       int      `json:"score"`
+	Suggestions []string `json:"suggestions"`
+}
 
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
@@ -286,8 +374,14 @@ type ListApplicationsParams struct {
 	Status *ApplicationStatus `form:"status,omitempty" json:"status,omitempty"`
 }
 
+// GenerateCoverLetterJSONRequestBody defines body for GenerateCoverLetter for application/json ContentType.
+type GenerateCoverLetterJSONRequestBody = CoverLetterRequest
+
 // ParseJobPostingJSONRequestBody defines body for ParseJobPosting for application/json ContentType.
 type ParseJobPostingJSONRequestBody ParseJobPostingJSONBody
+
+// ScoreApplicationJSONRequestBody defines body for ScoreApplication for application/json ContentType.
+type ScoreApplicationJSONRequestBody = ScoreRequest
 
 // CreateApplicationJSONRequestBody defines body for CreateApplication for application/json ContentType.
 type CreateApplicationJSONRequestBody = ApplicationInput
@@ -295,11 +389,20 @@ type CreateApplicationJSONRequestBody = ApplicationInput
 // UpdateApplicationJSONRequestBody defines body for UpdateApplication for application/json ContentType.
 type UpdateApplicationJSONRequestBody = ApplicationUpdate
 
+// UpdateProfileJSONRequestBody defines body for UpdateProfile for application/json ContentType.
+type UpdateProfileJSONRequestBody = Profile
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Generate a tailored cover letter for one application
+	// (POST /ai/cover-letter)
+	GenerateCoverLetter(ctx echo.Context) error
 	// Parse a raw job posting text into a structured application draft
 	// (POST /ai/parse-job)
 	ParseJobPosting(ctx echo.Context) error
+	// Score the stored CV against one application's job description
+	// (POST /ai/score)
+	ScoreApplication(ctx echo.Context) error
 	// List applications, optionally filtered by status
 	// (GET /applications)
 	ListApplications(ctx echo.Context, params ListApplicationsParams) error
@@ -315,11 +418,26 @@ type ServerInterface interface {
 	// Partially update an application (e.g. status change)
 	// (PATCH /applications/{id})
 	UpdateApplication(ctx echo.Context, id int64) error
+	// Get the stored CV profile
+	// (GET /profile)
+	GetProfile(ctx echo.Context) error
+	// Create or replace the CV profile
+	// (PUT /profile)
+	UpdateProfile(ctx echo.Context) error
 }
 
 // ServerInterfaceWrapper converts echo contexts to parameters.
 type ServerInterfaceWrapper struct {
 	Handler ServerInterface
+}
+
+// GenerateCoverLetter converts echo context to params.
+func (w *ServerInterfaceWrapper) GenerateCoverLetter(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GenerateCoverLetter(ctx)
+	return err
 }
 
 // ParseJobPosting converts echo context to params.
@@ -328,6 +446,15 @@ func (w *ServerInterfaceWrapper) ParseJobPosting(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.ParseJobPosting(ctx)
+	return err
+}
+
+// ScoreApplication converts echo context to params.
+func (w *ServerInterfaceWrapper) ScoreApplication(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ScoreApplication(ctx)
 	return err
 }
 
@@ -406,6 +533,24 @@ func (w *ServerInterfaceWrapper) UpdateApplication(ctx echo.Context) error {
 	return err
 }
 
+// GetProfile converts echo context to params.
+func (w *ServerInterfaceWrapper) GetProfile(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetProfile(ctx)
+	return err
+}
+
+// UpdateProfile converts echo context to params.
+func (w *ServerInterfaceWrapper) UpdateProfile(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.UpdateProfile(ctx)
+	return err
+}
+
 // This is a simple interface which specifies echo.Route addition functions which
 // are present on both echo.Echo and echo.Group, since we want to allow using
 // either of them for path registration
@@ -453,12 +598,16 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 		Handler: si,
 	}
 
+	router.POST(options.BaseURL+"/ai/cover-letter", wrapper.GenerateCoverLetter, options.OperationMiddlewares["generateCoverLetter"]...)
 	router.POST(options.BaseURL+"/ai/parse-job", wrapper.ParseJobPosting, options.OperationMiddlewares["parseJobPosting"]...)
+	router.POST(options.BaseURL+"/ai/score", wrapper.ScoreApplication, options.OperationMiddlewares["scoreApplication"]...)
 	router.GET(options.BaseURL+"/applications", wrapper.ListApplications, options.OperationMiddlewares["listApplications"]...)
 	router.POST(options.BaseURL+"/applications", wrapper.CreateApplication, options.OperationMiddlewares["createApplication"]...)
 	router.DELETE(options.BaseURL+"/applications/:id", wrapper.DeleteApplication, options.OperationMiddlewares["deleteApplication"]...)
 	router.GET(options.BaseURL+"/applications/:id", wrapper.GetApplication, options.OperationMiddlewares["getApplication"]...)
 	router.PATCH(options.BaseURL+"/applications/:id", wrapper.UpdateApplication, options.OperationMiddlewares["updateApplication"]...)
+	router.GET(options.BaseURL+"/profile", wrapper.GetProfile, options.OperationMiddlewares["getProfile"]...)
+	router.PUT(options.BaseURL+"/profile", wrapper.UpdateProfile, options.OperationMiddlewares["updateProfile"]...)
 
 }
 
@@ -467,29 +616,39 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"7Fjfb9s2EP5XCG4PLaDYbhsMhfuUdmuRImuDJt1LFwS0dLKZUiR7PDk1Av/vw5GyI1lajSxLhw17k/nj",
-	"eN933x2PvpG5q7yzYCnI6Y1ECN7ZAPHHS1V8gC81BOJfubMENn4q743OFWlnx1fBWR4L+QIqxV8/IpRy",
-	"Kn8Y35oep9kw/gXRoVyv15ksIOSoPRuRU3lsl8roQmA6UMxcsZLrTL5z9NrVtnh4Dz5AcDXmIKwjUcYz",
-	"eVGzj80e3R4afTDmfSmnn759XmvTsfU1yXV2Iz06D0g68ZwjKILiUkVopcOKv2ShCA5IVyAzSSsPcioD",
-	"obZz5kUXnbXa0k+Ht+u0JZgD8sLaF3c0vs4kR0EjFHL6iU/K2i52TF5sd7vZFeQk1xfrTPYwT3chx/gN",
-	"eyUzaWtj1MyAnBLWMIA+17Tijf0JV3llh+eg8satKrB0meb2CGW7/JxXrzN55WaXHc3c7EpIXQvvAmk7",
-	"FwRfKRMIdYBCGEWAonQoXv0mQu7YJaFsIXK3BBQGiADDUJyto8RYb8a7oDdu9CaDMgpXl5X62uXX1Uzr",
-	"nzJs62qWZLMxoO39DHhA7Yp9XJ/FxadpLW+Omci7wNYVq9Bo+xkKbWUmtS0AWJSBwAdylv1BKAFRGbnV",
-	"wGXQUUyOFoAtobZIIkV12OdbS8xnaQNnFZoB3ncyZyPGVqz6+dLJlrOtRxvcQS0j1iZhInwCXGq4Zmxl",
-	"CRjRs7E4PV+4wF9DgFsnfYw53JfwkTGi1GCKIFwcU+aFcNashEe31AUUm2mFIJpKwAj/k+n9fzr+y9Ox",
-	"l2w7YW9Bugb8HKguuMPIZFkb01yPXiE1nzH3bFhoP4gg9Ra9y66CENQc9heMzcKhKtGJScvthavRcI2p",
-	"nKVF/FqB4qG+h3yetqXrp/0ZmPIgVQ5x5Wai1V8JQpV/BhTXmhbi6FioEHQgZfPYO2hi1cm3bnberDs6",
-	"PZaZXAKGZHsyejKaMATnwSqv5VQ+G01GzyK1tIgUjZUee4UBDq7cLDLoUte566YtgqAFCNy5agW5OH5y",
-	"8mu8WBGoRhuEEgWqkkRLNiPxztGCN+ogPLvJsF/E7bnRYEkgcIFNJ6X98bJWxgRx+v7sXIxbBAU+m+u0",
-	"0DT6nVOCg5+6n0JO5Snjeutmp8ldmWIOgV5yj3uXvrYrK1TXlwy9T9Pr2pjEiisjBg7phq1HufOrA68Y",
-	"9OOhlqNJpq7J981lIJom+eOHk72d49bBvp67S7lmxYHW4+PpZPK39fz9Hrzf/scoFU20H/EbYCuNx8zK",
-	"4dOnD/8GOeeY5a42RXyFzED45JZiJbeimJ4mdVUpXG2cFypmRTvWUQPakhNKBMI6pxrZWiu7I+BorqNp",
-	"hjCHiLOr5hMd6Ki9MBZIVUHsYPk1xHeU/FIDci2yqkoKiaU6u3vANkV+fXFPgWiC6i63i7y9PhSiWg3F",
-	"i8ngHOsw1w1NXNKez7aNlVmJUhsCDslsJcL2OtsUvy7zr+IbrO3hX68kd8+Wfdn65CHOH+I80RD7ksMk",
-	"gSFjW+/GrX8xupFJhoQSFq7bEeonw/hGF+tUEw2krrkbmp/j+G5oOvwc9mtq2tUgOdyPZPtfSBdHMiOU",
-	"7YLIhvP3DdA3/Zx8rzjupNp9GHgDxAVO27mBXRKGihO3Hbe1Kf7B0ZV3u07t/Y+FK5NXlC/6ZKdX1ndN",
-	"2eZh98/dsEOx/ti8E+8Z51OFpGPdTA/PHc2LRzCaj5o6KvKFsnN4nNwJgMuNBGJ/IxdEfjoeG5crw43v",
-	"9Pnk+WSsvB4vn8j1xfqPAAAA//8=",
+	"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",
+	"dc7kQls3/mn002jIKjFcvqHrq/V/AgAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

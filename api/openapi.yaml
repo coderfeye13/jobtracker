@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: JobTracker API
   description: Self-hosted job application tracker with AI assistance
-  version: 0.1.0
+  version: 0.2.0
 
 servers:
   - url: http://localhost:8080/api/v1
@@ -93,6 +93,38 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /profile:
+    get:
+      operationId: getProfile
+      summary: Get the stored CV profile
+      responses:
+        "200":
+          description: Stored profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateProfile
+      summary: Create or replace the CV profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Profile"
+      responses:
+        "200":
+          description: Profile saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
   /ai/parse-job:
     post:
       operationId: parseJobPosting
@@ -128,6 +160,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+  /ai/score:
+    post:
+      operationId: scoreApplication
+      summary: Score the stored CV against one application's job description
+      description: >
+        Loads the stored CV (PUT /profile) and the application's job_description
+        from the database, asks the LLM for a fit analysis, persists the result
+        on the application (fit_score, score_details) and returns it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScoreRequest"
+      responses:
+        "200":
+          description: Scoring result (also persisted on the application)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/cover-letter:
+    post:
+      operationId: generateCoverLetter
+      summary: Generate a tailored cover letter for one application
+      description: >
+        Uses the stored CV and the application's job_description. The result is
+        returned only (not persisted) — the user reviews and edits it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CoverLetterRequest"
+      responses:
+        "200":
+          description: Generated cover letter draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoverLetterResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   schemas:
@@ -180,7 +263,7 @@ components:
           type: string
         job_description:
           type: string
-          description: Raw posting text, reused later for CV scoring and cover letters
+          description: Raw posting text, reused for CV scoring and cover letters
 
     ApplicationUpdate:
       type: object
@@ -235,6 +318,75 @@ components:
             updated_at:
               type: string
               format: date-time
+            fit_score:
+              type: integer
+              nullable: true
+              description: AI-generated match score (0-100), set by POST /ai/score
+            score_details:
+              type: string
+              nullable: true
+              description: JSON string with matched/missing keywords and suggestions
+
+    Profile:
+      type: object
+      required: [cv_text]
+      properties:
+        cv_text:
+          type: string
+          description: Raw text of the user's CV
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    ScoreRequest:
+      type: object
+      required: [application_id]
+      properties:
+        application_id:
+          type: integer
+          format: int64
+
+    ScoreResponse:
+      type: object
+      required: [score, matched_keywords, missing_keywords, suggestions]
+      properties:
+        score:
+          type: integer
+          description: Overall fit score, 0-100
+        matched_keywords:
+          type: array
+          items:
+            type: string
+        missing_keywords:
+          type: array
+          items:
+            type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+
+    CoverLetterRequest:
+      type: object
+      required: [application_id, language, tone]
+      properties:
+        application_id:
+          type: integer
+          format: int64
+        language:
+          type: string
+          enum: [en, de, tr]
+        tone:
+          type: string
+          enum: [formal, warm, concise]
+
+    CoverLetterResponse:
+      type: object
+      required: [cover_letter]
+      properties:
+        cover_letter:
+          type: string
 
     Error:
       type: object

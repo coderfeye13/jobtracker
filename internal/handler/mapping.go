@@ -19,6 +19,8 @@ func toGen(a store.Application) gen.Application {
 		JobDescription: a.JobDescription,
 		SalaryMin:      a.SalaryMin,
 		SalaryMax:      a.SalaryMax,
+		FitScore:       a.FitScore,     // Phase 2
+		ScoreDetails:   a.ScoreDetails, // Phase 2
 		CreatedAt:      a.CreatedAt,
 		UpdatedAt:      a.UpdatedAt,
 	}
@@ -77,7 +79,8 @@ func fromInput(in gen.ApplicationInput) store.Application {
 	return app
 }
 
-// applyUpdate: PATCH semantigi — nil olan alanlara dokunma
+// applyUpdate: PATCH semantigi — nil olan alanlara dokunma.
+// FitScore/ScoreDetails bilerek yok: o alanlari sadece /ai/score yazar.
 func applyUpdate(app *store.Application, upd gen.ApplicationUpdate) {
 	if upd.Company != nil {
 		app.Company = *upd.Company
@@ -121,5 +124,14 @@ func applyUpdate(app *store.Application, upd gen.ApplicationUpdate) {
 	if upd.AppliedAt != nil {
 		t := upd.AppliedAt.Time
 		app.AppliedAt = &t
+	}
+}
+
+// toGenProfile: DB Profile -> API Profile
+func toGenProfile(p store.Profile) gen.Profile {
+	t := p.UpdatedAt
+	return gen.Profile{
+		CvText:    p.CVText,
+		UpdatedAt: &t,
 	}
 }

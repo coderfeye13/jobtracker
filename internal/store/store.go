@@ -9,7 +9,7 @@ import (
 )
 
 // ErrNotFound is returned when a record does not exist.
-// Handler katmanı GORM detayını bilmesin diye kendi hatamıza çeviriyoruz.
+// Handler katmani GORM detayini bilmesin diye kendi hatamiza ceviriyoruz.
 var ErrNotFound = errors.New("not found")
 
 type Application struct {
@@ -27,8 +27,19 @@ type Application struct {
 	AppliedAt      *time.Time
 	Notes          *string
 	JobDescription *string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// Phase 2: set by POST /ai/score, never by the client directly.
+	FitScore     *int
+	ScoreDetails *string // JSON string: matched/missing keywords + suggestions
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// Profile holds the user's CV as raw text. Single-user app -> singleton row
+// pattern: there is at most one Profile and its ID is always 1.
+type Profile struct {
+	ID        int64 `gorm:"primaryKey"`
+	CVText    string
+	UpdatedAt time.Time
 }
 
 type Store struct {
@@ -40,7 +51,9 @@ func New(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&Application{}); err != nil {
+	// AutoMigrate adds the two new Application columns and creates the
+	// profiles table on first run after this change. Existing data is kept.
+	if err := db.AutoMigrate(&Application{}, &Profile{}); err != nil {
 		return nil, err
 	}
 	return &Store{db: db}, nil
@@ -71,7 +84,7 @@ func (s *Store) Create(app *Application) error {
 	return s.db.Create(app).Error
 }
 
-// Save writes the full record back (load-modify-save pattern for PATCH).
+// Save writes the full record back (load-modify-save pattern).
 func (s *Store) Save(app *Application) error {
 	return s.db.Save(app).Error
 }
@@ -85,4 +98,28 @@ func (s *Store) Delete(id int64) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// GetProfile returns the singleton profile row, or ErrNotFound if the user
+// has not uploaded a CV yet.
+func (s *Store) GetProfile() (*Profile, error) {
+	var p Profile
+	err := s.db.First(&p, 1).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// SaveProfile upserts the singleton row: because ID is fixed to 1,
+// gorm's Save updates the row if it exists and inserts it otherwise.
+func (s *Store) SaveProfile(cvText string) (*Profile, error) {
+	p := Profile{ID: 1, CVText: cvText}
+	if err := s.db.Save(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
