@@ -42,3 +42,25 @@ everything silently. Exception: boilerplate (mapping, config) can be written ful
 - Build: `go build ./...`
 - Run: `go run ./cmd/server` (port 8080)
 - Deps: `go mod tidy` after import changes
+
+## Frontend (`web/`)
+
+Stack: Vite + React, plain fetch, no state library. CSS variables, dark theme.
+
+```bash
+cd web && npm install   # first time only
+npm run dev             # http://localhost:5173
+```
+
+Dev workflow: run both the Go server and `npm run dev` simultaneously.
+CORS is configured for `http://localhost:5173` (Vite default).
+
+Component structure:
+- `App.jsx` — state, fetch/update/delete/create handlers
+- `components/KanbanBoard.jsx` — 6 status columns
+- `components/KanbanColumn.jsx` — HTML5 drag-and-drop drop target
+- `components/ApplicationCard.jsx` — draggable card, salary formatter
+- `components/DetailPanel.jsx` — right slide-in, notes edit, delete confirm
+- `components/AddModal.jsx` — AI parse flow or manual add
+- `components/ApplicationForm.jsx` — all ApplicationInput fields
+- `api.js` — `API_BASE` constant + fetch helpers

@@ -10,3 +10,7 @@ jobtracker.db
 
 # Go
 vendor/
+
+# Frontend
+web/node_modules/
+web/dist/
