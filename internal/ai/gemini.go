@@ -87,7 +87,7 @@ func (c *Client) ParseJob(ctx context.Context, rawText string, sourceURL *string
 
 	result, err := c.inner.Models.GenerateContent(
 		ctx,
-		"gemini-2.0-flash",
+		"gemini-2.5-flash",
 		genai.Text(prompt),
 		&genai.GenerateContentConfig{
 			SystemInstruction: systemInstruction,

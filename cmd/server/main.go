@@ -12,9 +12,11 @@ import (
 	"github.com/coderfeye13/jobtracker/internal/gen"
 	"github.com/coderfeye13/jobtracker/internal/handler"
 	"github.com/coderfeye13/jobtracker/internal/store"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	_ = godotenv.Load()
 	st, err := store.New("jobtracker.db")
 	if err != nil {
 		log.Fatal(err)
