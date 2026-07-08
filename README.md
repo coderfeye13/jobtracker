@@ -4,7 +4,7 @@ Self-hosted, AI-assisted job application tracker. Paste a job posting, let AI ex
 
 > Built as a real tool for my own Werkstudent search in Germany, and as a learning project for contract-first API design in Go.
 
-![Kanban board](docs/screenshot-board.png)
+![Kanban board](docs/screenshot-board.PNG)
 
 ## Features
 
