@@ -76,7 +76,8 @@ var systemInstruction = &genai.Content{
 	Parts: []*genai.Part{{Text: `You are a job application assistant. Extract structured information from the raw job posting text provided.
 If a field cannot be determined from the text, omit it.
 For salary extract numeric values only (no currency symbols).
-For employment_type: use "werkstudent" for student/working-student jobs, "fulltime", "parttime", or "internship" as appropriate.`}},
+For employment_type: use "werkstudent" for student/working-student jobs, "fulltime", "parttime", or "internship" as appropriate.
+Strip gender markers like (m/w/d), (f/m/x), (all gender) or ":in" suffixes from the position title.`}},
 }
 
 func (c *Client) ParseJob(ctx context.Context, rawText string, sourceURL *string) (*gen.ApplicationInput, error) {
