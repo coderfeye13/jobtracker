@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
+	"os"
 
 	"google.golang.org/genai"
 
 	"github.com/coderfeye13/jobtracker/internal/gen"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // ErrUnparseable is returned when Gemini cannot extract job details from the text.
@@ -18,6 +17,7 @@ var ErrUnparseable = errors.New("could not parse as job posting")
 
 type Client struct {
 	inner *genai.Client
+	model string // <- Model bilgisini struct içinde saklıyoruz
 }
 
 func NewClient(ctx context.Context, apiKey string) (*Client, error) {
@@ -28,7 +28,14 @@ func NewClient(ctx context.Context, apiKey string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{inner: c}, nil
+
+	// Yapılandırma uygulama başlangıcında bir kez çözülür
+	model := os.Getenv("GEMINI_MODEL")
+	if model == "" {
+		model = "gemini-2.5-flash"
+	}
+
+	return &Client{inner: c, model: model}, nil
 }
 
 type parsedJob struct {
@@ -40,8 +47,7 @@ type parsedJob struct {
 	SalaryMin      *float64 `json:"salary_min,omitempty"`
 	SalaryMax      *float64 `json:"salary_max,omitempty"`
 	SalaryPeriod   *string  `json:"salary_period,omitempty"`
-	AppliedAt      *string  `json:"applied_at,omitempty"`
-	JobDescription *string  `json:"job_description,omitempty"`
+	// applied_at ve job_description alanları şemadan temizlendi
 }
 
 var jobSchema = &genai.Schema{
@@ -63,11 +69,6 @@ var jobSchema = &genai.Schema{
 		"salary_min":    {Type: genai.TypeNumber, Description: "Lower bound of salary range (numeric only)"},
 		"salary_max":    {Type: genai.TypeNumber, Description: "Upper bound of salary range (numeric only)"},
 		"salary_period": {Type: genai.TypeString, Enum: []string{"hourly", "monthly", "yearly"}},
-		"applied_at":    {Type: genai.TypeString, Description: "Application deadline or post date in YYYY-MM-DD format"},
-		"job_description": {
-			Type:        genai.TypeString,
-			Description: "The full raw job posting text, verbatim",
-		},
 	},
 }
 
@@ -75,8 +76,7 @@ var systemInstruction = &genai.Content{
 	Parts: []*genai.Part{{Text: `You are a job application assistant. Extract structured information from the raw job posting text provided.
 If a field cannot be determined from the text, omit it.
 For salary extract numeric values only (no currency symbols).
-For employment_type: use "werkstudent" for student/working-student jobs, "fulltime", "parttime", or "internship" as appropriate.
-Always copy the full posting verbatim into job_description.`}},
+For employment_type: use "werkstudent" for student/working-student jobs, "fulltime", "parttime", or "internship" as appropriate.`}},
 }
 
 func (c *Client) ParseJob(ctx context.Context, rawText string, sourceURL *string) (*gen.ApplicationInput, error) {
@@ -87,7 +87,7 @@ func (c *Client) ParseJob(ctx context.Context, rawText string, sourceURL *string
 
 	result, err := c.inner.Models.GenerateContent(
 		ctx,
-		"gemini-2.5-flash",
+		c.model, // <- Runtime'da env okumak yerine struct alanını kullanıyoruz
 		genai.Text(prompt),
 		&genai.GenerateContentConfig{
 			SystemInstruction: systemInstruction,
@@ -125,7 +125,7 @@ func toInput(p parsedJob, rawText string) *gen.ApplicationInput {
 		City:           p.City,
 		SalaryMin:      p.SalaryMin,
 		SalaryMax:      p.SalaryMax,
-		JobDescription: &rawText,
+		JobDescription: &rawText, // <- Ham metni doğrudan buradan besliyoruz
 	}
 	if p.Source != nil {
 		v := gen.ApplicationInputSource(*p.Source)
@@ -138,11 +138,6 @@ func toInput(p parsedJob, rawText string) *gen.ApplicationInput {
 	if p.SalaryPeriod != nil {
 		v := gen.SalaryPeriod(*p.SalaryPeriod)
 		input.SalaryPeriod = &v
-	}
-	if p.AppliedAt != nil {
-		if t, err := time.Parse("2006-01-02", *p.AppliedAt); err == nil {
-			input.AppliedAt = &openapi_types.Date{Time: t}
-		}
 	}
 	return &input
 }
