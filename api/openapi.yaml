@@ -160,7 +160,44 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-
+  /ai/parse-url:
+    post:
+      operationId: parseJobURL
+      summary: Fetch a public job posting URL and parse it
+      description: >
+        Works for public pages (company career sites). Pages behind login
+        walls (e.g. LinkedIn) return 422 with a hint to copy-paste instead.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+      responses:
+        "200":
+          description: Parsed draft (not persisted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationInput"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          description: Page could not be read or parsed as a job posting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: URL could not be fetched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /ai/score:
     post:
       operationId: scoreApplication

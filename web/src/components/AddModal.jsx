@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { parseJobPosting } from '../api.js'
+import { parseJobPosting, parseJobURL } from '../api.js'
 import ApplicationForm from './ApplicationForm.jsx'
 
 export default function AddModal({ onSave, onClose }) {
@@ -14,7 +14,9 @@ export default function AddModal({ onSave, onClose }) {
     setParsing(true)
     setParseError(null)
     try {
-      const result = await parseJobPosting(rawText, url || undefined)
+      const result = rawText.trim()
+        ? await parseJobPosting(rawText, url || undefined)
+        : await parseJobURL(url)
       setDraft(result)
       setStep('form')
     } catch (e) {
@@ -69,7 +71,7 @@ export default function AddModal({ onSave, onClose }) {
               <button
                 className="btn-primary"
                 onClick={handleParse}
-                disabled={!rawText.trim() || parsing}
+                disabled={(!rawText.trim() && !url.trim()) || parsing}
               >
                 {parsing
                   ? <><span className="spinner" /> Parsing…</>

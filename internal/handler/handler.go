@@ -150,6 +150,36 @@ func (s *Server) ParseJobPosting(ctx echo.Context) error {
 	}
 	return ctx.JSON(http.StatusOK, input)
 }
+func (s *Server) ParseJobURL(ctx echo.Context) error {
+	if s.ai == nil {
+		return ctx.JSON(http.StatusServiceUnavailable, gen.Error{Message: "AI not configured: set GEMINI_API_KEY"})
+	}
+	var body gen.ParseJobURLJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return ctx.JSON(http.StatusBadRequest, gen.Error{Message: err.Error()})
+	}
+
+	text, err := ai.FetchJobText(ctx.Request().Context(), body.Url)
+	switch {
+	case errors.Is(err, ai.ErrInvalidURL):
+		return ctx.JSON(http.StatusBadRequest, gen.Error{Message: "invalid URL"})
+	case errors.Is(err, ai.ErrFetchFailed):
+		return ctx.JSON(http.StatusBadGateway, gen.Error{Message: "could not fetch the page"})
+	case errors.Is(err, ai.ErrPageUnreadable):
+		return ctx.JSON(http.StatusUnprocessableEntity, gen.Error{Message: "page not readable — it may require login; copy-paste the posting text instead"})
+	case err != nil:
+		return err
+	}
+
+	input, err := s.ai.ParseJob(ctx.Request().Context(), text, &body.Url)
+	if errors.Is(err, ai.ErrUnparseable) {
+		return ctx.JSON(http.StatusUnprocessableEntity, gen.Error{Message: "page content could not be parsed as a job posting"})
+	}
+	if err != nil {
+		return err
+	}
+	return ctx.JSON(http.StatusOK, input)
+}
 
 // loadScoringInputs centralizes the shared preconditions of score and
 // cover-letter: application exists, CV exists, job_description present.

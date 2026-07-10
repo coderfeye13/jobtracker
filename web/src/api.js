@@ -34,6 +34,13 @@ export const parseJobPosting = (rawText, url) =>
     body: JSON.stringify({ raw_text: rawText, ...(url ? { url } : {}) }),
   }).then(handleResponse)
 
+export const parseJobURL = (url) =>
+  fetch(`${API_BASE}/ai/parse-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  }).then(handleResponse)
+
 export const getProfile = () =>
   fetch(`${API_BASE}/profile`).then(handleResponse)
 
