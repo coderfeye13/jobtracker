@@ -15,3 +15,5 @@ vendor/
 web/node_modules/
 web/dist/
 .claude/
+credentials.json
+token.json
