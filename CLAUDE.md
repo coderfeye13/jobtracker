@@ -14,8 +14,8 @@ Self-hosted job application tracker. Go backend, contract-first design.
 
 ## Roadmap
 
-- Phase 1 (current): CRUD + `POST /ai/parse-job` via Gemini (structured JSON output)
-- Phase 1.5 (bonus): `POST /ai/parse-url` — fetch a public job posting URL
+- Phase 1 (DONE): CRUD + `POST /ai/parse-job` via Gemini (structured JSON output)
+- Phase 1.5 (DONE): `POST /ai/parse-url` — fetch a public job posting URL
   server-side (company career pages, not LinkedIn), extract main content
   (e.g. go-shiori/go-readability), feed into the existing ParseJob pipeline.
   Same AI function, second input channel. Skip pages behind login walls;
@@ -23,8 +23,20 @@ Self-hosted job application tracker. Go backend, contract-first design.
 - Phase 2 (DONE): CV profile (PUT/GET /profile), AI fit scoring
   (POST /ai/score — persists fit_score + score_details on the application),
   cover letter generation (POST /ai/cover-letter — draft only, not persisted).
-  Backend complete; frontend integration pending.
-- Phase 3: Gmail integration (job alert filtering, rejection/progress classification)
+  Backend and frontend complete.
+- Phase 3 (backend DONE, frontend pending): Gmail integration.
+  `internal/gmail` — read-only OAuth (gmail.readonly) desktop flow:
+  credentials.json in repo root (gitignored), token.json cached after
+  first console-based auth (gitignored). `internal/sync` — shared sync
+  pass (fetch recent mail -> ai.ClassifyEmail against open applications
+  and the CV -> persist as store.InboxEvent), guarded by a mutex so the
+  POST /inbox/sync endpoint and the 30-minute background loop
+  (cmd/server/main.go) never overlap. If credentials.json is missing the
+  server still starts; gmail client is nil and all /inbox endpoints
+  return 503, same pattern as the nil AI client. Endpoints: POST
+  /inbox/sync, GET /inbox/events, POST /inbox/events/{id}/apply (writes
+  the suggested status onto the linked application), POST
+  /inbox/events/{id}/dismiss.
 - Phase 4+ (idea, not scheduled): Browser extension ("clip to jobtracker") —
   a small Chrome extension that grabs the visible text of the currently open
   job posting (user is already logged in, so no scraping/ToS issues) and
@@ -45,6 +57,13 @@ everything silently. Exception: boilerplate (mapping, config) can be written ful
 - Build: `go build ./...`
 - Run: `go run ./cmd/server` (port 8080)
 - Deps: `go mod tidy` after import changes
+- Gmail (Phase 3): put an OAuth "Desktop app" client's `credentials.json` in
+  the repo root (gitignored). First run with no `token.json` prints a
+  consent URL to the console and reads the exchange code from stdin; the
+  resulting token is cached to `token.json` (gitignored) for later runs.
+  Without `credentials.json` the server still starts and all `/inbox`
+  endpoints return 503. Optional `GMAIL_QUERY` env var overrides the
+  default search (`newer_than:3d category:(primary OR updates)`).
 
 ## Frontend (`web/`)
 

@@ -21,7 +21,7 @@ export function scoreCls(score) {
   return 'score-red'
 }
 
-export default function ApplicationCard({ app, onClick }) {
+export default function ApplicationCard({ app, onClick, scoring }) {
   const salary = formatSalary(app)
 
   return (
@@ -36,7 +36,9 @@ export default function ApplicationCard({ app, onClick }) {
     >
       <div className="card-top">
         <div className="card-company">{app.company}</div>
-        {app.fit_score != null && (
+        {scoring ? (
+          <span className="spinner spinner-sm card-score-spinner" title="Scoring…" />
+        ) : app.fit_score != null && (
           <span className={`score-badge ${scoreCls(app.fit_score)}`}>{app.fit_score}</span>
         )}
       </div>

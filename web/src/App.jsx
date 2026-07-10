@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listApplications, updateApplication, deleteApplication, createApplication } from './api.js'
+import { listApplications, updateApplication, deleteApplication, createApplication, scoreApplication } from './api.js'
 import KanbanBoard from './components/KanbanBoard.jsx'
 import DetailPanel from './components/DetailPanel.jsx'
 import AddModal from './components/AddModal.jsx'
 import CVModal from './components/CVModal.jsx'
+import InboxModal from './components/InboxModal.jsx'
 
 export default function App() {
   const [apps, setApps] = useState([])
@@ -12,6 +13,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCVModal, setShowCVModal] = useState(false)
+  const [showInboxModal, setShowInboxModal] = useState(false)
+  const [scoringIds, setScoringIds] = useState(new Set())
 
   const fetchApps = useCallback(async () => {
     try {
@@ -52,6 +55,13 @@ export default function App() {
     const created = await createApplication(data)
     setApps(prev => [created, ...prev])
     setShowAddModal(false)
+    if (created.job_description?.trim()) {
+      scoreInBackground(created.id)
+    }
+  }
+
+  const handleInboxApplied = (updatedApp) => {
+    setApps(prev => prev.map(a => a.id === updatedApp.id ? updatedApp : a))
   }
 
   const handleAppScored = (id, scoreResult) => {
@@ -60,6 +70,24 @@ export default function App() {
         ? { ...a, fit_score: scoreResult.score, score_details: JSON.stringify(scoreResult) }
         : a
     ))
+  }
+
+  const scoreInBackground = async (id) => {
+    setScoringIds(prev => new Set(prev).add(id))
+    try {
+      const data = await scoreApplication(id)
+      handleAppScored(id, data)
+    } catch (e) {
+      // best-effort: no CV yet (400), AI unavailable (503), etc. — fail silently in the UI,
+      // but log so we can tell auto-score apart from "it just never ran"
+      console.warn(`auto-score failed for application ${id}:`, e.status, e.message)
+    } finally {
+      setScoringIds(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
   }
 
   const selectedApp = apps.find(a => a.id === selectedId) ?? null
@@ -72,6 +100,7 @@ export default function App() {
       <header className="app-header">
         <h1>JobTracker</h1>
         <div className="header-actions">
+          <button className="btn-secondary" onClick={() => setShowInboxModal(true)}>Inbox</button>
           <button className="btn-secondary" onClick={() => setShowCVModal(true)}>My CV</button>
           <button className="btn-primary"   onClick={() => setShowAddModal(true)}>+ Add Application</button>
         </div>
@@ -82,6 +111,7 @@ export default function App() {
           apps={apps}
           onStatusChange={handleStatusChange}
           onCardClick={setSelectedId}
+          scoringIds={scoringIds}
         />
       </main>
 
@@ -103,6 +133,10 @@ export default function App() {
 
       {showCVModal && (
         <CVModal onClose={() => setShowCVModal(false)} />
+      )}
+
+      {showInboxModal && (
+        <InboxModal onClose={() => setShowInboxModal(false)} onApplied={handleInboxApplied} />
       )}
     </div>
   )

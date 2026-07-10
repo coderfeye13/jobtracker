@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ApplicationCard from './ApplicationCard.jsx'
 
-export default function KanbanColumn({ status, label, color, apps, onStatusChange, onCardClick }) {
+export default function KanbanColumn({ status, label, color, apps, onStatusChange, onCardClick, scoringIds }) {
   const [dragOver, setDragOver] = useState(false)
 
   const handleDragOver = (e) => {
@@ -33,6 +33,7 @@ export default function KanbanColumn({ status, label, color, apps, onStatusChang
             key={app.id}
             app={app}
             onClick={() => onCardClick(app.id)}
+            scoring={scoringIds?.has(app.id)}
           />
         ))}
       </div>

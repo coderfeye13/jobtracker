@@ -9,7 +9,7 @@ export const STATUSES = [
   { key: 'ghosted',    label: 'Ghosted',    color: '#6b7280' },
 ]
 
-export default function KanbanBoard({ apps, onStatusChange, onCardClick }) {
+export default function KanbanBoard({ apps, onStatusChange, onCardClick, scoringIds }) {
   return (
     <div className="kanban-board">
       {STATUSES.map(({ key, label, color }) => (
@@ -21,6 +21,7 @@ export default function KanbanBoard({ apps, onStatusChange, onCardClick }) {
           apps={apps.filter(a => (a.status ?? 'saved') === key)}
           onStatusChange={onStatusChange}
           onCardClick={onCardClick}
+          scoringIds={scoringIds}
         />
       ))}
     </div>

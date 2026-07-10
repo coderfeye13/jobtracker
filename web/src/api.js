@@ -64,3 +64,20 @@ export const generateCoverLetter = (appId, language, tone) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ application_id: appId, language, tone }),
   }).then(handleResponse)
+
+export const syncInbox = () =>
+  fetch(`${API_BASE}/inbox/sync`, { method: 'POST' }).then(handleResponse)
+
+export const listInboxEvents = ({ kind, includeDismissed } = {}) => {
+  const params = new URLSearchParams()
+  if (kind) params.set('kind', kind)
+  if (includeDismissed) params.set('include_dismissed', 'true')
+  const qs = params.toString()
+  return fetch(`${API_BASE}/inbox/events${qs ? `?${qs}` : ''}`).then(handleResponse)
+}
+
+export const applyInboxEvent = (id) =>
+  fetch(`${API_BASE}/inbox/events/${id}/apply`, { method: 'POST' }).then(handleResponse)
+
+export const dismissInboxEvent = (id) =>
+  fetch(`${API_BASE}/inbox/events/${id}/dismiss`, { method: 'POST' }).then(handleResponse)

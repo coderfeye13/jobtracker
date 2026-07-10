@@ -248,12 +248,152 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+  /inbox/sync:
+    post:
+      operationId: syncInbox
+      summary: Fetch and classify recent emails now
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fetched, new_events]
+                properties:
+                  fetched:
+                    type: integer
+                    description: Messages examined in this run
+                  new_events:
+                    type: integer
+                    description: New inbox events created
+        "503":
+          description: Gmail not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
+  /inbox/events:
+    get:
+      operationId: listInboxEvents
+      summary: List classified email events, newest first
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/InboxEventKind"
+        - name: include_dismissed
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InboxEvent"
+
+  /inbox/events/{id}/apply:
+    post:
+      operationId: applyInboxEvent
+      summary: Apply the suggested status to the linked application
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Updated application
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Event has no linked application or no suggested status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /inbox/events/{id}/dismiss:
+    post:
+      operationId: dismissInboxEvent
+      summary: Hide an event from the default list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: Dismissed
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   schemas:
     ApplicationStatus:
       type: string
       enum: [saved, applied, interview, offer, rejected, ghosted]
+    InboxEventKind:
+      type: string
+      enum: [job_alert, application_update, irrelevant]
+
+    InboxEvent:
+      type: object
+      required:
+        [
+          id,
+          gmail_message_id,
+          received_at,
+          from,
+          subject,
+          kind,
+          summary,
+          dismissed,
+        ]
+      properties:
+        id:
+          type: integer
+          format: int64
+        gmail_message_id:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+        from:
+          type: string
+        subject:
+          type: string
+        kind:
+          $ref: "#/components/schemas/InboxEventKind"
+        summary:
+          type: string
+          description: AI-written 1-3 sentence summary (job matches or update meaning)
+        application_id:
+          type: integer
+          format: int64
+          nullable: true
+        suggested_status:
+          $ref: "#/components/schemas/ApplicationStatus"
+        confidence:
+          type: number
+          format: double
+          nullable: true
+        dismissed:
+          type: boolean
 
     SalaryPeriod:
       type: string

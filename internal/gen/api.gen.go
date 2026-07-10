@@ -206,6 +206,27 @@ func (e EmploymentType) Valid() bool {
 	}
 }
 
+// Defines values for InboxEventKind.
+const (
+	InboxEventKindApplicationUpdate InboxEventKind = "application_update"
+	InboxEventKindIrrelevant        InboxEventKind = "irrelevant"
+	InboxEventKindJobAlert          InboxEventKind = "job_alert"
+)
+
+// Valid indicates whether the value is a known member of the InboxEventKind enum.
+func (e InboxEventKind) Valid() bool {
+	switch e {
+	case InboxEventKindApplicationUpdate:
+		return true
+	case InboxEventKindIrrelevant:
+		return true
+	case InboxEventKindJobAlert:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SalaryPeriod.
 const (
 	Hourly  SalaryPeriod = "hourly"
@@ -329,6 +350,26 @@ type Error struct {
 	Message string `json:"message"`
 }
 
+// InboxEvent defines model for InboxEvent.
+type InboxEvent struct {
+	ApplicationId   *int64             `json:"application_id,omitempty"`
+	Confidence      *float64           `json:"confidence,omitempty"`
+	Dismissed       bool               `json:"dismissed"`
+	From            string             `json:"from"`
+	GmailMessageId  string             `json:"gmail_message_id"`
+	Id              int64              `json:"id"`
+	Kind            InboxEventKind     `json:"kind"`
+	ReceivedAt      time.Time          `json:"received_at"`
+	Subject         string             `json:"subject"`
+	SuggestedStatus *ApplicationStatus `json:"suggested_status,omitempty"`
+
+	// Summary AI-written 1-3 sentence summary (job matches or update meaning)
+	Summary string `json:"summary"`
+}
+
+// InboxEventKind defines model for InboxEventKind.
+type InboxEventKind string
+
 // Profile defines model for Profile.
 type Profile struct {
 	// CvText Raw text of the user's CV
@@ -377,6 +418,12 @@ type ParseJobURLJSONBody struct {
 // ListApplicationsParams defines parameters for ListApplications.
 type ListApplicationsParams struct {
 	Status *ApplicationStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListInboxEventsParams defines parameters for ListInboxEvents.
+type ListInboxEventsParams struct {
+	Kind             *InboxEventKind `form:"kind,omitempty" json:"kind,omitempty"`
+	IncludeDismissed *bool           `form:"include_dismissed,omitempty" json:"include_dismissed,omitempty"`
 }
 
 // GenerateCoverLetterJSONRequestBody defines body for GenerateCoverLetter for application/json ContentType.
@@ -429,6 +476,18 @@ type ServerInterface interface {
 	// Partially update an application (e.g. status change)
 	// (PATCH /applications/{id})
 	UpdateApplication(ctx echo.Context, id int64) error
+	// List classified email events, newest first
+	// (GET /inbox/events)
+	ListInboxEvents(ctx echo.Context, params ListInboxEventsParams) error
+	// Apply the suggested status to the linked application
+	// (POST /inbox/events/{id}/apply)
+	ApplyInboxEvent(ctx echo.Context, id int64) error
+	// Hide an event from the default list
+	// (POST /inbox/events/{id}/dismiss)
+	DismissInboxEvent(ctx echo.Context, id int64) error
+	// Fetch and classify recent emails now
+	// (POST /inbox/sync)
+	SyncInbox(ctx echo.Context) error
 	// Get the stored CV profile
 	// (GET /profile)
 	GetProfile(ctx echo.Context) error
@@ -553,6 +612,72 @@ func (w *ServerInterfaceWrapper) UpdateApplication(ctx echo.Context) error {
 	return err
 }
 
+// ListInboxEvents converts echo context to params.
+func (w *ServerInterfaceWrapper) ListInboxEvents(ctx echo.Context) error {
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListInboxEventsParams
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", ctx.QueryParams(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter kind: %s", err))
+	}
+
+	// ------------- Optional query parameter "include_dismissed" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_dismissed", ctx.QueryParams(), &params.IncludeDismissed, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter include_dismissed: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ListInboxEvents(ctx, params)
+	return err
+}
+
+// ApplyInboxEvent converts echo context to params.
+func (w *ServerInterfaceWrapper) ApplyInboxEvent(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ApplyInboxEvent(ctx, id)
+	return err
+}
+
+// DismissInboxEvent converts echo context to params.
+func (w *ServerInterfaceWrapper) DismissInboxEvent(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.DismissInboxEvent(ctx, id)
+	return err
+}
+
+// SyncInbox converts echo context to params.
+func (w *ServerInterfaceWrapper) SyncInbox(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.SyncInbox(ctx)
+	return err
+}
+
 // GetProfile converts echo context to params.
 func (w *ServerInterfaceWrapper) GetProfile(ctx echo.Context) error {
 	var err error
@@ -627,6 +752,10 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 	router.DELETE(options.BaseURL+"/applications/:id", wrapper.DeleteApplication, options.OperationMiddlewares["deleteApplication"]...)
 	router.GET(options.BaseURL+"/applications/:id", wrapper.GetApplication, options.OperationMiddlewares["getApplication"]...)
 	router.PATCH(options.BaseURL+"/applications/:id", wrapper.UpdateApplication, options.OperationMiddlewares["updateApplication"]...)
+	router.GET(options.BaseURL+"/inbox/events", wrapper.ListInboxEvents, options.OperationMiddlewares["listInboxEvents"]...)
+	router.POST(options.BaseURL+"/inbox/events/:id/apply", wrapper.ApplyInboxEvent, options.OperationMiddlewares["applyInboxEvent"]...)
+	router.POST(options.BaseURL+"/inbox/events/:id/dismiss", wrapper.DismissInboxEvent, options.OperationMiddlewares["dismissInboxEvent"]...)
+	router.POST(options.BaseURL+"/inbox/sync", wrapper.SyncInbox, options.OperationMiddlewares["syncInbox"]...)
 	router.GET(options.BaseURL+"/profile", wrapper.GetProfile, options.OperationMiddlewares["getProfile"]...)
 	router.PUT(options.BaseURL+"/profile", wrapper.UpdateProfile, options.OperationMiddlewares["updateProfile"]...)
 
@@ -637,41 +766,50 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"/w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

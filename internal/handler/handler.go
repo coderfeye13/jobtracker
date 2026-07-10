@@ -7,19 +7,23 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	gmailv1 "google.golang.org/api/gmail/v1"
 
 	"github.com/coderfeye13/jobtracker/internal/ai"
 	"github.com/coderfeye13/jobtracker/internal/gen"
 	"github.com/coderfeye13/jobtracker/internal/store"
+	syncpkg "github.com/coderfeye13/jobtracker/internal/sync"
 )
 
 type Server struct {
-	store *store.Store
-	ai    *ai.Client // nil if GEMINI_API_KEY not set
+	store  *store.Store
+	ai     *ai.Client       // nil if GEMINI_API_KEY not set
+	gmail  *gmailv1.Service // nil if credentials.json is missing — Phase 3
+	syncer *syncpkg.Syncer  // Phase 3; always non-nil, no-ops if gmail/ai unset
 }
 
-func NewServer(st *store.Store, aiClient *ai.Client) *Server {
-	return &Server{store: st, ai: aiClient}
+func NewServer(st *store.Store, aiClient *ai.Client, gmailSvc *gmailv1.Service, syncer *syncpkg.Syncer) *Server {
+	return &Server{store: st, ai: aiClient, gmail: gmailSvc, syncer: syncer}
 }
 
 // ---------------------------------------------------------------------------
@@ -273,4 +277,99 @@ func (s *Server) GenerateCoverLetter(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, gen.CoverLetterResponse{CoverLetter: letter})
+}
+
+// ---------------------------------------------------------------------------
+// Inbox — Phase 3
+// ---------------------------------------------------------------------------
+
+// syncResult is the anonymous response object POST /inbox/sync documents
+// inline in the spec — no named schema, so no gen type for it.
+type syncResult struct {
+	Fetched   int `json:"fetched"`
+	NewEvents int `json:"new_events"`
+}
+
+func (s *Server) SyncInbox(ctx echo.Context) error {
+	if s.gmail == nil {
+		return ctx.JSON(http.StatusServiceUnavailable, gen.Error{Message: "Gmail not configured: add credentials.json to the repo root and restart"})
+	}
+	if s.ai == nil {
+		return ctx.JSON(http.StatusServiceUnavailable, gen.Error{Message: "AI not configured: set GEMINI_API_KEY"})
+	}
+	res, err := s.syncer.Run(ctx.Request().Context(), "")
+	if err != nil {
+		return err
+	}
+	return ctx.JSON(http.StatusOK, syncResult{Fetched: res.Fetched, NewEvents: res.NewEvents})
+}
+
+func (s *Server) ListInboxEvents(ctx echo.Context, params gen.ListInboxEventsParams) error {
+	if s.gmail == nil {
+		return ctx.JSON(http.StatusServiceUnavailable, gen.Error{Message: "Gmail not configured: add credentials.json to the repo root and restart"})
+	}
+	var kindStr *string
+	if params.Kind != nil {
+		v := string(*params.Kind)
+		kindStr = &v
+	}
+	includeDismissed := params.IncludeDismissed != nil && *params.IncludeDismissed
+
+	events, err := s.store.ListInboxEvents(kindStr, includeDismissed)
+	if err != nil {
+		return err
+	}
+	out := make([]gen.InboxEvent, len(events))
+	for i, e := range events {
+		out[i] = toGenInboxEvent(e)
+	}
+	return ctx.JSON(http.StatusOK, out)
+}
+
+func (s *Server) ApplyInboxEvent(ctx echo.Context, id int64) error {
+	if s.gmail == nil {
+		return ctx.JSON(http.StatusServiceUnavailable, gen.Error{Message: "Gmail not configured: add credentials.json to the repo root and restart"})
+	}
+	event, err := s.store.GetInboxEvent(id)
+	if errors.Is(err, store.ErrNotFound) {
+		return ctx.JSON(http.StatusNotFound, gen.Error{Message: "inbox event not found"})
+	}
+	if err != nil {
+		return err
+	}
+	if event.ApplicationID == nil || event.SuggestedStatus == nil {
+		return ctx.JSON(http.StatusConflict, gen.Error{Message: "event has no linked application or suggested status"})
+	}
+
+	app, err := s.store.Get(*event.ApplicationID)
+	if errors.Is(err, store.ErrNotFound) {
+		return ctx.JSON(http.StatusNotFound, gen.Error{Message: "application not found"})
+	}
+	if err != nil {
+		return err
+	}
+	app.Status = *event.SuggestedStatus
+	if err := s.store.Save(app); err != nil {
+		return err
+	}
+	// The suggestion has been acted on; drop it from the default event list too.
+	if err := s.store.DismissInboxEvent(id); err != nil {
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, toGen(*app))
+}
+
+func (s *Server) DismissInboxEvent(ctx echo.Context, id int64) error {
+	if s.gmail == nil {
+		return ctx.JSON(http.StatusServiceUnavailable, gen.Error{Message: "Gmail not configured: add credentials.json to the repo root and restart"})
+	}
+	err := s.store.DismissInboxEvent(id)
+	if errors.Is(err, store.ErrNotFound) {
+		return ctx.JSON(http.StatusNotFound, gen.Error{Message: "inbox event not found"})
+	}
+	if err != nil {
+		return err
+	}
+	return ctx.NoContent(http.StatusNoContent)
 }

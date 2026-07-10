@@ -135,3 +135,24 @@ func toGenProfile(p store.Profile) gen.Profile {
 		UpdatedAt: &t,
 	}
 }
+
+// toGenInboxEvent: DB InboxEvent -> API InboxEvent
+func toGenInboxEvent(e store.InboxEvent) gen.InboxEvent {
+	out := gen.InboxEvent{
+		Id:             e.ID,
+		GmailMessageId: e.GmailMessageID,
+		ReceivedAt:     e.ReceivedAt,
+		From:           e.From,
+		Subject:        e.Subject,
+		Kind:           gen.InboxEventKind(e.Kind),
+		Summary:        e.Summary,
+		ApplicationId:  e.ApplicationID,
+		Confidence:     e.Confidence,
+		Dismissed:      e.Dismissed,
+	}
+	if e.SuggestedStatus != nil {
+		v := gen.ApplicationStatus(*e.SuggestedStatus)
+		out.SuggestedStatus = &v
+	}
+	return out
+}

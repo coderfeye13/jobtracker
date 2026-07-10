@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"google.golang.org/genai"
 
@@ -279,4 +280,163 @@ func (c *Client) GenerateCoverLetter(ctx context.Context, cvText, jobDescription
 	}
 
 	return firstText(result)
+}
+
+// ---------------------------------------------------------------------------
+// ClassifyEmail — Phase 3
+// ---------------------------------------------------------------------------
+
+// ApplicationSummary is the minimal view of a tracked application the
+// classifier needs to decide whether an email is about it.
+type ApplicationSummary struct {
+	ID       int64
+	Company  string
+	Position string
+	Status   string
+}
+
+// EmailClassification is the AI layer's own type (validated at the
+// boundary, same reasoning as ScoreResult).
+type EmailClassification struct {
+	Kind            string  `json:"kind"`
+	Summary         string  `json:"summary"`
+	ApplicationID   int64   `json:"application_id"`
+	SuggestedStatus string  `json:"suggested_status"`
+	Confidence      float64 `json:"confidence"`
+}
+
+var classifySchema = &genai.Schema{
+	Type:     genai.TypeObject,
+	Required: []string{"kind", "summary", "application_id", "suggested_status", "confidence"},
+	Properties: map[string]*genai.Schema{
+		"kind": {
+			Type: genai.TypeString,
+			Enum: []string{"job_alert", "application_update", "irrelevant"},
+		},
+		"summary": {
+			Type:        genai.TypeString,
+			Description: "1-3 sentences. For job_alert: which position(s) in the mail match the CV profile and why; mention city if present. For application_update: what changed.",
+		},
+		"application_id": {
+			Type:        genai.TypeInteger,
+			Description: "ID of the candidate application this email is about. Must be one of the given candidate IDs, or 0 if none / not an application_update.",
+		},
+		"suggested_status": {
+			Type:        genai.TypeString,
+			Description: "New status to suggest for the matched application. Empty string if not applicable.",
+			Enum:        []string{"none", "applied", "interview", "offer", "rejected", "ghosted"},
+		},
+		"confidence": {
+			Type:        genai.TypeNumber,
+			Description: "Confidence in this classification, 0 (guess) to 1 (certain)",
+		},
+	},
+}
+
+var classifyInstruction = &genai.Content{
+	Parts: []*genai.Part{{Text: `You are an email triage assistant for a job search tracker. Classify the email and, if relevant, connect it to one of the candidate's tracked applications.
+
+KINDS:
+- job_alert: a job board or company sent one or more open positions. Set summary to which position(s) in the mail are a good match for the candidate's CV profile and why; mention city if the mail states one. If none of the listed positions are a reasonable match, use "irrelevant" instead.
+- application_update: the email reports on the status of ONE SPECIFIC application the candidate already submitted (e.g. rejection, interview/assessment invite, offer). Only use this kind if the company or position clearly appears in the email AND matches one of the candidate applications listed in the prompt — never guess application_id otherwise.
+- irrelevant: marketing, newsletters, unrelated account/notification emails, or anything not about the candidate's own job search.
+
+STATUS RULES (application_update only):
+- Clear rejection language -> suggested_status "rejected".
+- Invitation to interview, phone screen, technical assessment, or next round -> "interview".
+- Job offer extended -> "offer".
+- If the update does not clearly map to applied/interview/offer/rejected/ghosted, use suggested_status "none".
+
+Classify conservatively: when unsure, prefer "irrelevant" over a wrong match, and never match an application unless its company or position is clearly present in the email. application_id must be 0 unless kind is application_update with a clear match.`}},
+}
+
+// ClassifyEmail asks Gemini to classify a single email against the
+// candidate's currently open (non-terminal) applications. body is
+// truncated to a few thousand characters before being sent.
+func (c *Client) ClassifyEmail(ctx context.Context, from, subject, body string, candidates []ApplicationSummary, cvSummary string) (*EmailClassification, error) {
+	const maxBodyChars = 4000
+	if len(body) > maxBodyChars {
+		body = body[:maxBodyChars]
+	}
+
+	var candidateLines strings.Builder
+	if len(candidates) == 0 {
+		candidateLines.WriteString("(none — candidate has no open applications)")
+	}
+	for _, a := range candidates {
+		fmt.Fprintf(&candidateLines, "- id=%d company=%q position=%q status=%s\n", a.ID, a.Company, a.Position, a.Status)
+	}
+
+	prompt := fmt.Sprintf(
+		"FROM: %s\nSUBJECT: %s\n\nBODY:\n%s\n\nCANDIDATE'S OPEN APPLICATIONS:\n%s\nCANDIDATE'S CV:\n%s",
+		from, subject, body, candidateLines.String(), cvSummary,
+	)
+
+	result, err := c.inner.Models.GenerateContent(
+		ctx,
+		c.model,
+		genai.Text(prompt),
+		&genai.GenerateContentConfig{
+			SystemInstruction: classifyInstruction,
+			ResponseMIMEType:  "application/json",
+			ResponseSchema:    classifySchema,
+			Temperature:       genai.Ptr[float32](0.1),
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("gemini: %w", err)
+	}
+
+	raw, err := firstText(result)
+	if err != nil {
+		return nil, err
+	}
+
+	var res EmailClassification
+	if err := json.Unmarshal([]byte(raw), &res); err != nil {
+		return nil, fmt.Errorf("gemini: invalid classification payload: %w", err)
+	}
+
+	// Boundary validation: never trust the model to stay in range or
+	// respect the candidate list.
+
+	// suggested_status: whitelist. "none" is a schema-only sentinel (empty
+	// enum values are rejected by Gemini); anything outside the real
+	// statuses collapses to "" = no suggestion.
+	switch res.SuggestedStatus {
+	case "applied", "interview", "offer", "rejected", "ghosted":
+		// valid suggestion, keep it
+	default:
+		res.SuggestedStatus = ""
+	}
+
+	switch res.Kind {
+	case "job_alert", "application_update", "irrelevant":
+	default:
+		res.Kind = "irrelevant"
+	}
+	if res.Confidence < 0 {
+		res.Confidence = 0
+	}
+	if res.Confidence > 1 {
+		res.Confidence = 1
+	}
+	if res.Kind != "application_update" {
+		res.ApplicationID = 0
+		res.SuggestedStatus = ""
+	} else if !isCandidateID(candidates, res.ApplicationID) {
+		res.ApplicationID = 0
+		res.SuggestedStatus = ""
+	}
+
+	return &res, nil
+}
+
+func isCandidateID(candidates []ApplicationSummary, id int64) bool {
+	for _, a := range candidates {
+		if a.ID == id {
+			return true
+		}
+	}
+	return false
 }
