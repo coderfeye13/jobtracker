@@ -98,6 +98,11 @@ oapi-codegen -config oapi-codegen.yaml api/openapi.yaml
 - [x] Phase 1.5 — `parse-url`: fetch public job postings server-side
 - [x] Phase 2 — CV fit scoring & tailored cover letter generation (+ background auto-scoring)
 - [x] Phase 3 — Gmail integration: inbox classification, status suggestions with human confirmation
+- [ ] Phase 2.5 — CV tailoring: per-application content adaptation (reorder, re-emphasize,
+      align terminology with the posting) with a strict no-fabrication policy and a
+      visible change log; outputs text, natural tone — never invents skills or experience
+- [ ] End goal — PDF generation: render the tailored CV into a proper document template
+      (evaluating feasibility; content-first until then)
 - [ ] Idea — browser extension: one-click capture from LinkedIn/Indeed/StepStone
 
 ## Security notes
