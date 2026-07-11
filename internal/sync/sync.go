@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	syncpkg "sync"
 
 	gmailv1 "google.golang.org/api/gmail/v1"
@@ -83,7 +84,7 @@ func (sy *Syncer) Run(ctx context.Context, query string) (Result, error) {
 	}
 
 	result := Result{Fetched: len(messages)}
-	for _, m := range messages {
+	for i, m := range messages {
 		seen, err := sy.store.HasInboxEvent(m.ID)
 		if err != nil {
 			log.Printf("inbox sync: dedupe check failed for message %s: %v", m.ID, err)
@@ -95,6 +96,15 @@ func (sy *Syncer) Run(ctx context.Context, query string) (Result, error) {
 
 		cls, err := sy.ai.ClassifyEmail(ctx, m.From, m.Subject, m.Body, candidates, cvText)
 		if err != nil {
+			// Free-tier rate limit (5 req/min): once we hit it, every further
+			// call in this run would fail too. Stop early — unprocessed
+			// messages are not persisted, so the next run (manual or the
+			// 30-min loop) picks them up via the dedupe check.
+			// Pragmatic string match: single vendor, stable error format.
+			if strings.Contains(err.Error(), "Error 429") {
+				log.Printf("inbox sync: rate limited, stopping this run early (%d message(s) left for the next run)", len(messages)-i)
+				break
+			}
 			log.Printf("inbox sync: classification failed for message %s: %v", m.ID, err)
 			continue
 		}
