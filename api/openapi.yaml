@@ -248,6 +248,31 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+  /ai/tailor-cv:
+    post:
+      operationId: tailorCV
+      summary: Adapt the stored CV's content to one application's posting
+      description: >
+        Reorders, re-emphasizes and aligns terminology with the posting under
+        a strict no-fabrication policy. Returns adapted text plus a change
+        log; nothing is persisted — the user reviews and copies the result.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TailorRequest"
+      responses:
+        "200":
+          description: Tailored CV draft with a visible change log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TailorResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /inbox/sync:
     post:
       operationId: syncInbox
@@ -571,6 +596,30 @@ components:
       properties:
         message:
           type: string
+
+    TailorRequest:
+      type: object
+      required: [application_id, language]
+      properties:
+        application_id:
+          type: integer
+          format: int64
+        language:
+          type: string
+          enum: [en, de, tr]
+
+    TailorResponse:
+      type: object
+      required: [tailored_cv, changes]
+      properties:
+        tailored_cv:
+          type: string
+          description: Adapted CV as plain text
+        changes:
+          type: array
+          items:
+            type: string
+          description: One line per modification made, for human review
 
   responses:
     BadRequest:

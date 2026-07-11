@@ -154,6 +154,7 @@ func (s *Server) ParseJobPosting(ctx echo.Context) error {
 	}
 	return ctx.JSON(http.StatusOK, input)
 }
+
 func (s *Server) ParseJobURL(ctx echo.Context) error {
 	if s.ai == nil {
 		return ctx.JSON(http.StatusServiceUnavailable, gen.Error{Message: "AI not configured: set GEMINI_API_KEY"})
@@ -277,6 +278,13 @@ func (s *Server) GenerateCoverLetter(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, gen.CoverLetterResponse{CoverLetter: letter})
+}
+
+// TailorCV adapts the stored CV's content to one application's posting.
+// Phase 2.5 — contract and stub only for now; real implementation follows
+// (guardrails documented in CLAUDE.md).
+func (s *Server) TailorCV(ctx echo.Context) error {
+	return ctx.JSON(http.StatusNotImplemented, gen.Error{Message: "not implemented yet"})
 }
 
 // ---------------------------------------------------------------------------
