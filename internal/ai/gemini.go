@@ -347,6 +347,8 @@ STATUS RULES (application_update only):
 - Job offer extended -> "offer".
 - If the update does not clearly map to applied/interview/offer/rejected/ghosted, use suggested_status "none".
 
+Emails about the candidate's OWN applications (confirmations, rejections, interview invitations) are application_update even when they match none of the open applications in the list; set application_id to 0 in that case.
+
 Classify conservatively: when unsure, prefer "irrelevant" over a wrong match, and never match an application unless its company or position is clearly present in the email. application_id must be 0 unless kind is application_update with a clear match.`}},
 }
 
