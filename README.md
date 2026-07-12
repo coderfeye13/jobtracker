@@ -16,6 +16,20 @@ Self-hosted, AI-assisted job application tracker. Paste a job posting (or just i
 - **German job market aware** — Werkstudent as a first-class employment type, hourly/monthly/yearly salary periods, EUR formatting
 - **Local & private** — SQLite file on your disk, bring your own free Gemini API key, read-only Gmail scope, no accounts, no cloud. Email bodies are never stored — only sender, subject and an AI summary.
 
+### Screenshots
+
+**Fit-score badges on the board** — the scorer differentiates: a remote software role scores 78 (green), a hardware role 25 (red):
+
+![Score badges](docs/screenshot-board.png)
+
+**Inbox** — AI-classified email events with suggested status changes, applied only on explicit confirmation:
+
+![Inbox](docs/screenshot-inbox.png)
+
+**CV tailoring with an audit log** — every modification is listed for human review; the change log caught the model adding a skill on its very first real test, which is exactly why it exists:
+
+![Tailor CV](docs/screenshot-tailor.png)
+
 ## Architecture
 
 ```
