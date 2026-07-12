@@ -479,6 +479,10 @@ RULES (all mandatory):
 2. TERMINOLOGY ALIGNMENT. If the CV contains evidence for a posting keyword under a different name, align the wording to the posting's term (e.g. CV "GitLab CI/CD pipelines" vs posting "Build-Automatisierung"). This is renaming existing evidence, never inventing new evidence.
 3. REORDER FREEDOM. Move the most relevant experience, projects and skills first; shorten or drop items irrelevant to this posting. Keep the CV's section structure (education, experience, skills, projects) recognizable.
 4. NATURAL TONE. Plain, factual, human. Keep the CV's existing voice and sentence rhythm. Forbidden: buzzword inflation ("spearheaded", "leveraged", "passionate", "results-driven", "synergy"), superlatives, and any phrasing the original author would not naturally write. A rephrased bullet must stay verifiable in an interview: if the candidate couldn't defend the sentence word-by-word, don't write it. When in doubt, prefer the CV's original wording over a "better-sounding" alternative.
+Self-check before answering: every skill, tool and technology in
+tailored_cv must literally appear somewhere in the CANDIDATE CV. Your
+changes list must never contain the word "Added" for a skill or tool —
+cutting and renaming existing evidence are allowed, adding is not.
 
 OUTPUT: write the tailored CV in the requested LANGUAGE (translate faithfully if it differs from the CV's language — translation is not fabrication). In "changes", list every modification you made, one short line each, so the candidate can audit you. If you made no change of a given kind, don't pad the list.`}},
 }
