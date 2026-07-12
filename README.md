@@ -20,7 +20,7 @@ Self-hosted, AI-assisted job application tracker. Paste a job posting (or just i
 
 **Fit-score badges on the board** — the scorer differentiates: a remote software role scores 78 (green), a hardware role 25 (red):
 
-![Score badges](docs/screenshot-board.png)
+![Score badges](docs/screenshot-score-badges.png)
 
 **Inbox** — AI-classified email events with suggested status changes, applied only on explicit confirmation:
 
