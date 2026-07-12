@@ -281,10 +281,38 @@ func (s *Server) GenerateCoverLetter(ctx echo.Context) error {
 }
 
 // TailorCV adapts the stored CV's content to one application's posting.
-// Phase 2.5 — contract and stub only for now; real implementation follows
-// (guardrails documented in CLAUDE.md).
+// Draft-only: nothing is persisted; the user reviews the change log and
+// copies the result into their own document.
 func (s *Server) TailorCV(ctx echo.Context) error {
-	return ctx.JSON(http.StatusNotImplemented, gen.Error{Message: "not implemented yet"})
+	if s.ai == nil {
+		return ctx.JSON(http.StatusServiceUnavailable, gen.Error{Message: "AI not configured: set GEMINI_API_KEY"})
+	}
+	var req gen.TailorRequest
+	if err := ctx.Bind(&req); err != nil {
+		return ctx.JSON(http.StatusBadRequest, gen.Error{Message: err.Error()})
+	}
+
+	app, prof, errResp := s.loadScoringInputs(ctx, req.ApplicationId)
+	if app == nil {
+		return errResp
+	}
+
+	res, err := s.ai.TailorCV(
+		ctx.Request().Context(),
+		prof.CVText,
+		*app.JobDescription,
+		app.Company,
+		app.Position,
+		string(req.Language),
+	)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, gen.TailorResponse{
+		TailoredCv: res.TailoredCV,
+		Changes:    res.Changes,
+	})
 }
 
 // ---------------------------------------------------------------------------

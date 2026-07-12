@@ -442,3 +442,87 @@ func isCandidateID(candidates []ApplicationSummary, id int64) bool {
 	}
 	return false
 }
+
+// ---------------------------------------------------------------------------
+// TailorCV — Phase 2.5
+// ---------------------------------------------------------------------------
+
+// TailorResult is the AI layer's own type (same boundary-validation
+// reasoning as parsedJob / ScoreResult / EmailClassification).
+type TailorResult struct {
+	TailoredCV string   `json:"tailored_cv"`
+	Changes    []string `json:"changes"`
+}
+
+var tailorSchema = &genai.Schema{
+	Type:     genai.TypeObject,
+	Required: []string{"tailored_cv", "changes"},
+	Properties: map[string]*genai.Schema{
+		"tailored_cv": {
+			Type:        genai.TypeString,
+			Description: "The adapted CV as plain text, same overall structure as the original",
+		},
+		"changes": {
+			Type:        genai.TypeArray,
+			Items:       &genai.Schema{Type: genai.TypeString},
+			Description: "One short line per modification made (reorder, rephrase, cut, terminology alignment) so a human can review every change",
+		},
+	},
+}
+
+// The four guardrails recorded in CLAUDE.md, verbatim as prompt rules.
+var tailorInstruction = &genai.Content{
+	Parts: []*genai.Part{{Text: `You adapt a candidate's CV to one specific job posting. You are an editor, not an author.
+
+RULES (all mandatory):
+1. NO FABRICATION. You may reorder, rephrase, emphasize and cut. You may NEVER add skills, tools, employers, dates, degrees, metrics or responsibilities that are not present in the CV. If a keyword from the posting has no evidence in the CV, do not insert it.
+2. TERMINOLOGY ALIGNMENT. If the CV contains evidence for a posting keyword under a different name, align the wording to the posting's term (e.g. CV "GitLab CI/CD pipelines" vs posting "Build-Automatisierung"). This is renaming existing evidence, never inventing new evidence.
+3. REORDER FREEDOM. Move the most relevant experience, projects and skills first; shorten or drop items irrelevant to this posting. Keep the CV's section structure (education, experience, skills, projects) recognizable.
+4. NATURAL TONE. Plain, factual, human. Keep the CV's existing voice and sentence rhythm. Forbidden: buzzword inflation ("spearheaded", "leveraged", "passionate", "results-driven", "synergy"), superlatives, and any phrasing the original author would not naturally write. A rephrased bullet must stay verifiable in an interview: if the candidate couldn't defend the sentence word-by-word, don't write it. When in doubt, prefer the CV's original wording over a "better-sounding" alternative.
+
+OUTPUT: write the tailored CV in the requested LANGUAGE (translate faithfully if it differs from the CV's language — translation is not fabrication). In "changes", list every modification you made, one short line each, so the candidate can audit you. If you made no change of a given kind, don't pad the list.`}},
+}
+
+// TailorCV adapts the stored CV's content to one posting under the four
+// guardrails above. Returns the adapted text plus an auditable change log.
+func (c *Client) TailorCV(ctx context.Context, cvText, jobDescription, company, position, language string) (*TailorResult, error) {
+	prompt := fmt.Sprintf(
+		"COMPANY: %s\nPOSITION: %s\nLANGUAGE: %s\n\nJOB POSTING:\n%s\n\nCANDIDATE CV:\n%s",
+		company, position, language, jobDescription, cvText,
+	)
+
+	result, err := c.inner.Models.GenerateContent(
+		ctx,
+		c.model,
+		genai.Text(prompt),
+		&genai.GenerateContentConfig{
+			SystemInstruction: tailorInstruction,
+			ResponseMIMEType:  "application/json",
+			ResponseSchema:    tailorSchema,
+			// Between extraction (0.1) and letter-writing (0.7): rephrasing
+			// needs some freedom, fabrication resistance needs restraint.
+			Temperature: genai.Ptr[float32](0.3),
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("gemini: %w", err)
+	}
+
+	raw, err := firstText(result)
+	if err != nil {
+		return nil, err
+	}
+
+	var res TailorResult
+	if err := json.Unmarshal([]byte(raw), &res); err != nil {
+		return nil, fmt.Errorf("gemini: invalid tailor payload: %w", err)
+	}
+	// Boundary validation: an empty CV means the model failed the task.
+	if strings.TrimSpace(res.TailoredCV) == "" {
+		return nil, fmt.Errorf("gemini: empty tailored CV")
+	}
+	if res.Changes == nil {
+		res.Changes = []string{}
+	}
+	return &res, nil
+}
