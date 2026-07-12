@@ -592,3 +592,25 @@ body {
   font-size: 0.875rem; color: var(--text-muted);
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
+
+/* ── Tailor CV ─────────────────────────────────────── */
+.tailor-result { display: flex; flex-direction: column; gap: 12px; }
+.tailor-hint { font-style: italic; justify-content: flex-start; }
+
+.tailor-columns { display: flex; flex-wrap: wrap; gap: 16px; }
+
+.tailor-cv-col { flex: 7 1 260px; display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+.tailor-cv-textarea { min-height: 280px; }
+
+.tailor-changes-col { flex: 3 1 160px; display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
+.changes-list {
+  margin: 0; padding: 10px 12px 10px 28px; list-style: none;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
+  font-size: 0.82rem; line-height: 1.5; color: var(--text);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.changes-list li { position: relative; }
+.changes-list li::before {
+  content: "•"; position: absolute; left: -14px; color: var(--accent); font-weight: 700;
+}

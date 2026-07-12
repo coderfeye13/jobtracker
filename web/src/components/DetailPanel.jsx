@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ET_LABELS, formatSalary } from './ApplicationCard.jsx'
 import ScoreSection from './ScoreSection.jsx'
 import CoverLetterSection from './CoverLetterSection.jsx'
+import TailorCVSection from './TailorCVSection.jsx'
 
 const SOURCE_LABELS = {
   linkedin: 'LinkedIn', indeed: 'Indeed', stepstone: 'StepStone',
@@ -80,6 +81,8 @@ export default function DetailPanel({ app, onUpdate, onDelete, onClose, onOpenCV
           <ScoreSection app={app} onOpenCV={onOpenCV} onAppScored={onAppScored} />
 
           <CoverLetterSection app={app} onOpenCV={onOpenCV} />
+
+          <TailorCVSection app={app} onOpenCV={onOpenCV} />
         </div>
 
         <div className="detail-footer">

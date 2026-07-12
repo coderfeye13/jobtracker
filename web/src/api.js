@@ -65,6 +65,13 @@ export const generateCoverLetter = (appId, language, tone) =>
     body: JSON.stringify({ application_id: appId, language, tone }),
   }).then(handleResponse)
 
+export const tailorCV = (appId, language) =>
+  fetch(`${API_BASE}/ai/tailor-cv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ application_id: appId, language }),
+  }).then(handleResponse)
+
 export const syncInbox = () =>
   fetch(`${API_BASE}/inbox/sync`, { method: 'POST' }).then(handleResponse)
 
