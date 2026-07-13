@@ -26,6 +26,20 @@ func NewServer(st *store.Store, aiClient *ai.Client, gmailSvc *gmailv1.Service, 
 	return &Server{store: st, ai: aiClient, gmail: gmailSvc, syncer: syncer}
 }
 
+// aiError translates Gemini failures into honest HTTP responses instead of
+// a generic 500. Rate limits are temporary and the client should know that.
+// Pragmatic string match: single vendor, stable error format (same approach
+// as the early-exit in internal/sync).
+func aiError(ctx echo.Context, err error) error {
+	if strings.Contains(err.Error(), "Error 429") {
+		ctx.Response().Header().Set("Retry-After", "60")
+		return ctx.JSON(http.StatusTooManyRequests, gen.Error{
+			Message: "AI rate limit reached (free tier) — wait about a minute and try again",
+		})
+	}
+	return err // everything else stays a logged 500
+}
+
 // ---------------------------------------------------------------------------
 // Applications — Phase 1
 // ---------------------------------------------------------------------------
@@ -150,7 +164,7 @@ func (s *Server) ParseJobPosting(ctx echo.Context) error {
 		return ctx.JSON(http.StatusUnprocessableEntity, gen.Error{Message: "text could not be parsed as a job posting"})
 	}
 	if err != nil {
-		return err
+		return aiError(ctx, err)
 	}
 	return ctx.JSON(http.StatusOK, input)
 }
@@ -181,14 +195,15 @@ func (s *Server) ParseJobURL(ctx echo.Context) error {
 		return ctx.JSON(http.StatusUnprocessableEntity, gen.Error{Message: "page content could not be parsed as a job posting"})
 	}
 	if err != nil {
-		return err
+		return aiError(ctx, err)
 	}
 	return ctx.JSON(http.StatusOK, input)
 }
 
-// loadScoringInputs centralizes the shared preconditions of score and
-// cover-letter: application exists, CV exists, job_description present.
-// Returning (nil, nil, nil) means an HTTP error response was already written.
+// loadScoringInputs centralizes the shared preconditions of score,
+// cover-letter and tailor: application exists, CV exists, job_description
+// present. Returning (nil, nil, <resp>) means an HTTP error response was
+// already written.
 func (s *Server) loadScoringInputs(ctx echo.Context, applicationID int64) (*store.Application, *store.Profile, error) {
 	app, err := s.store.Get(applicationID)
 	if errors.Is(err, store.ErrNotFound) {
@@ -226,7 +241,7 @@ func (s *Server) ScoreApplication(ctx echo.Context) error {
 
 	res, err := s.ai.ScoreCV(ctx.Request().Context(), prof.CVText, *app.JobDescription)
 	if err != nil {
-		return err
+		return aiError(ctx, err)
 	}
 
 	// Persist the result on the application so the board can show the badge.
@@ -274,7 +289,7 @@ func (s *Server) GenerateCoverLetter(ctx echo.Context) error {
 		string(req.Tone),
 	)
 	if err != nil {
-		return err
+		return aiError(ctx, err)
 	}
 
 	return ctx.JSON(http.StatusOK, gen.CoverLetterResponse{CoverLetter: letter})
@@ -306,7 +321,7 @@ func (s *Server) TailorCV(ctx echo.Context) error {
 		string(req.Language),
 	)
 	if err != nil {
-		return err
+		return aiError(ctx, err)
 	}
 
 	return ctx.JSON(http.StatusOK, gen.TailorResponse{
