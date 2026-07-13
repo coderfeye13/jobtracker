@@ -17,3 +17,5 @@ web/dist/
 .claude/
 credentials.json
 token.json
+*.db.bak
+seed-demo.sh
